@@ -1,115 +1,229 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Scanner</title>
-  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+  <title>Barcode Scanner</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { width: 100%; height: 100%; background: #0F172A; overflow: hidden; }
-
-    #reader {
-      width: 100%;
-      height: 100%;
-    }
-
-    /* html5-qrcode'un kendi UI elementlerini gizle */
-    #reader__header_message,
-    #reader__status_span,
-    #reader__dashboard_section_swaplink,
-    #reader__filescan_input,
-    select {
-      display: none !important;
-    }
-
-    #reader video {
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover !important;
-    }
-
-    #reader__scan_region {
-      width: 100% !important;
-      height: 100% !important;
-      position: relative;
-    }
-
-    #reader__scan_region img { display: none !important; }
-
-    #overlay {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #frame {
-      width: 65%;
-      aspect-ratio: 1;
-      border: 2px solid #7DD3FC;
-      border-radius: 16px;
-      background: rgba(125, 211, 252, 0.05);
-      box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
-    }
-
-    #error {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: #0F172A;
-      color: #E2E8F0;
-      font-family: system-ui, sans-serif;
-      font-size: 15px;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 24px;
-    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#081018;font-family:-apple-system,system-ui,sans-serif;color:#F8FAFC;min-height:100vh}
+    .hero{padding:16px 20px 12px}
+    h1{font-size:26px;font-weight:800;letter-spacing:.2px}
+    .sub{color:#A7B3C0;font-size:14px;margin-top:4px;line-height:1.4}
+    .cam-wrap{margin:0 16px;height:300px;border-radius:24px;overflow:hidden;
+      background:#0F172A;border:1px solid rgba(255,255,255,.12);position:relative}
+    video{width:100%;height:100%;object-fit:cover;display:block}
+    .frame{position:absolute;top:22%;left:12%;right:12%;bottom:22%;
+      border:2px solid #7DD3FC;border-radius:16px;
+      background:rgba(125,211,252,.05);pointer-events:none}
+    canvas{display:none}
+    .paused-overlay{position:absolute;inset:0;background:#0F172A;
+      display:flex;align-items:center;justify-content:center;font-size:15px;color:#E2E8F0;font-weight:600}
+    .actions{display:flex;gap:10px;padding:14px 16px 0}
+    .btn-primary{background:#38BDF8;color:#07111A;font-weight:800;
+      padding:12px 18px;border-radius:14px;border:none;cursor:pointer;font-size:14px}
+    .btn-secondary{background:#172033;color:#E2E8F0;font-weight:700;
+      padding:12px 18px;border-radius:14px;border:1px solid rgba(255,255,255,.08);
+      cursor:pointer;font-size:14px}
+    .btn-secondary:disabled{opacity:.4;cursor:default}
+    .panel{padding:16px}
+    .section-title{font-size:17px;font-weight:700;margin:12px 0 8px}
+    .result-box{background:#111B2B;border-radius:14px;padding:14px;
+      color:#DBEAFE;font-size:15px;line-height:1.5;word-break:break-all}
+    .meta{color:#94A3B8;font-size:13px;margin-top:8px;line-height:1.6}
+    .history-item{background:#111B2B;border-radius:14px;padding:14px;margin-top:10px}
+    .history-type{color:#7DD3FC;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+    .history-val{color:#F8FAFC;margin-top:6px;font-size:14px;word-break:break-all}
+    .history-time{color:#94A3B8;font-size:12px;margin-top:6px}
+    #err-msg{background:#1e0a0a;border:1px solid #7f1d1d;border-radius:14px;
+      padding:14px;color:#fca5a5;font-size:14px;margin:12px 16px;display:none}
   </style>
 </head>
 <body>
-  <div id="reader"></div>
-  <div id="overlay"><div id="frame"></div></div>
-  <div id="error"></div>
+<div class="hero">
+  <h1>Barcode Scanner</h1>
+  <p class="sub" id="sub-text">Kamera başlatılıyor...</p>
+</div>
 
-  <script>
-    const scanner = new Html5Qrcode("reader");
+<div class="cam-wrap" id="cam-wrap">
+  <video id="video" playsinline muted autoplay></video>
+  <canvas id="canvas"></canvas>
+  <div class="frame" id="frame"></div>
+  <div class="paused-overlay" id="paused" style="display:none">Tarama duraklatıldı</div>
+</div>
 
-    scanner.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.333 },
-      function(decodedText, decodedResult) {
-        const fmt = decodedResult?.result?.format?.formatName ?? "unknown";
-        // Sonucu parent Expo app'e gönder
-        window.parent.postMessage({ type: "BARCODE_SCANNED", data: decodedText, format: fmt }, "*");
-        scanner.stop().catch(() => {});
-      },
-      function() { /* not found — normal */ }
-    ).catch(function(err) {
-      scanner.stop().catch(() => {});
-      const el = document.getElementById("error");
-      el.style.display = "flex";
-      el.textContent = "⚠️ Kamera açılamadı: " + (err?.message ?? err);
-    });
+<div id="err-msg"></div>
 
-    // Parent'tan "RESUME" mesajı gelirse yeniden başlat
-    window.addEventListener("message", function(e) {
-      if (e.data && e.data.type === "RESUME") {
-        scanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.333 },
-          function(decodedText, decodedResult) {
-            const fmt = decodedResult?.result?.format?.formatName ?? "unknown";
-            window.parent.postMessage({ type: "BARCODE_SCANNED", data: decodedText, format: fmt }, "*");
-            scanner.stop().catch(() => {});
-          },
-          function() {}
-        ).catch(() => {});
+<div class="actions">
+  <button class="btn-primary" onclick="resumeScan()">Tekrar tara</button>
+  <button class="btn-secondary" id="btn-copy" onclick="copyResult()" disabled>Kopyala</button>
+  <button class="btn-secondary" id="btn-open" onclick="openResult()" disabled>Aç</button>
+</div>
+
+<div class="panel">
+  <div class="section-title">Son Sonuç</div>
+  <div class="result-box" id="result-text">Henüz okutma yok.</div>
+  <div class="meta" id="result-meta"></div>
+
+  <div class="section-title">Geçmiş</div>
+  <div id="history-list"><div style="color:#94A3B8;font-size:14px">Kayıt bulunmuyor.</div></div>
+</div>
+
+<!-- ZXing UMD — CDN'den, bundler yok -->
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
+<script>
+  var video = document.getElementById('video');
+  var canvas = document.getElementById('canvas');
+  var ctx = canvas.getContext('2d');
+  var subText = document.getElementById('sub-text');
+  var pausedEl = document.getElementById('paused');
+  var frameEl = document.getElementById('frame');
+  var errMsg = document.getElementById('err-msg');
+
+  var latestResult = null;
+  var history = [];
+  var scanning = true;
+  var tickTimer = null;
+  var stream = null;
+  var reader = null;
+
+  function showError(msg) {
+    errMsg.textContent = '⚠️ ' + msg;
+    errMsg.style.display = 'block';
+    subText.textContent = 'Kamera açılamadı.';
+  }
+
+  function initReader() {
+    var hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.QR_CODE,
+      ZXing.BarcodeFormat.EAN_13,
+      ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.UPC_A,
+      ZXing.BarcodeFormat.UPC_E,
+      ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.CODE_93,
+      ZXing.BarcodeFormat.CODE_128,
+      ZXing.BarcodeFormat.ITF,
+      ZXing.BarcodeFormat.CODABAR,
+      ZXing.BarcodeFormat.PDF_417,
+      ZXing.BarcodeFormat.AZTEC,
+      ZXing.BarcodeFormat.DATA_MATRIX,
+    ]);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+    reader = new ZXing.MultiFormatReader();
+    reader.setHints(hints);
+  }
+
+  function tick() {
+    if (!scanning) return;
+    if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      try {
+        var lum = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        var bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+        var result = reader.decode(bmp);
+        if (result) {
+          onFound(result.getText(), result.getBarcodeFormat().toString());
+          return;
+        }
+      } catch(e) {
+        // NotFoundException — normal, devam et
       }
+    }
+    tickTimer = setTimeout(tick, 150);
+  }
+
+  function onFound(data, fmt) {
+    scanning = false;
+    clearTimeout(tickTimer);
+    subText.textContent = 'Tarama duraklatıldı.';
+    pausedEl.style.display = 'flex';
+    frameEl.style.display = 'none';
+
+    latestResult = { data: data, type: fmt, time: new Date().toLocaleString('tr-TR') };
+    history.unshift(latestResult);
+    if (history.length > 10) history.pop();
+
+    document.getElementById('result-text').textContent = data;
+    document.getElementById('result-meta').innerHTML = 'Tür: ' + fmt + '<br>Zaman: ' + latestResult.time;
+    document.getElementById('btn-copy').disabled = false;
+    document.getElementById('btn-open').disabled = false;
+
+    renderHistory();
+  }
+
+  function renderHistory() {
+    var el = document.getElementById('history-list');
+    if (history.length === 0) {
+      el.innerHTML = '<div style="color:#94A3B8;font-size:14px">Kayıt bulunmuyor.</div>';
+      return;
+    }
+    el.innerHTML = history.map(function(h) {
+      return '<div class="history-item">' +
+        '<div class="history-type">' + h.type + '</div>' +
+        '<div class="history-val">' + h.data + '</div>' +
+        '<div class="history-time">' + h.time + '</div>' +
+        '</div>';
+    }).join('');
+  }
+
+  function resumeScan() {
+    scanning = true;
+    pausedEl.style.display = 'none';
+    frameEl.style.display = 'block';
+    subText.textContent = 'Kamerayı barkoda doğrultun.';
+    tick();
+  }
+
+  function copyResult() {
+    if (!latestResult) return;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(latestResult.data).then(function() {
+        alert('Kopyalandı!');
+      });
+    } else {
+      var ta = document.createElement('textarea');
+      ta.value = latestResult.data;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      alert('Kopyalandı!');
+    }
+  }
+
+  function openResult() {
+    if (!latestResult) return;
+    var url = latestResult.data.startsWith('http')
+      ? latestResult.data
+      : 'https://www.google.com/search?q=' + encodeURIComponent(latestResult.data);
+    window.open(url, '_blank');
+  }
+
+  // Başlat
+  initReader();
+
+  var constraints = { video: { facingMode: { exact: 'environment' } } };
+  navigator.mediaDevices.getUserMedia(constraints)
+    .catch(function() {
+      // exact desteklenmiyorsa ideal dene
+      return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    })
+    .then(function(s) {
+      stream = s;
+      video.srcObject = s;
+      video.onloadedmetadata = function() {
+        video.play();
+        subText.textContent = 'Kamerayı barkoda doğrultun.';
+        tick();
+      };
+    })
+    .catch(function(err) {
+      showError(err.message || 'Kamera izni reddedildi.');
     });
-  </script>
+</script>
 </body>
 </html>
