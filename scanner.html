@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Scanner</title>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #0F172A; overflow: hidden; }
+
+    #reader {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* html5-qrcode'un kendi UI elementlerini gizle */
+    #reader__header_message,
+    #reader__status_span,
+    #reader__dashboard_section_swaplink,
+    #reader__filescan_input,
+    select {
+      display: none !important;
+    }
+
+    #reader video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+    }
+
+    #reader__scan_region {
+      width: 100% !important;
+      height: 100% !important;
+      position: relative;
+    }
+
+    #reader__scan_region img { display: none !important; }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #frame {
+      width: 65%;
+      aspect-ratio: 1;
+      border: 2px solid #7DD3FC;
+      border-radius: 16px;
+      background: rgba(125, 211, 252, 0.05);
+      box-shadow: 0 0 0 9999px rgba(0,0,0,0.45);
+    }
+
+    #error {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: #0F172A;
+      color: #E2E8F0;
+      font-family: system-ui, sans-serif;
+      font-size: 15px;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div id="reader"></div>
+  <div id="overlay"><div id="frame"></div></div>
+  <div id="error"></div>
+
+  <script>
+    const scanner = new Html5Qrcode("reader");
+
+    scanner.start(
+      { facingMode: "environment" },
+      { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.333 },
+      function(decodedText, decodedResult) {
+        const fmt = decodedResult?.result?.format?.formatName ?? "unknown";
+        // Sonucu parent Expo app'e gönder
+        window.parent.postMessage({ type: "BARCODE_SCANNED", data: decodedText, format: fmt }, "*");
+        scanner.stop().catch(() => {});
+      },
+      function() { /* not found — normal */ }
+    ).catch(function(err) {
+      scanner.stop().catch(() => {});
+      const el = document.getElementById("error");
+      el.style.display = "flex";
+      el.textContent = "⚠️ Kamera açılamadı: " + (err?.message ?? err);
+    });
+
+    // Parent'tan "RESUME" mesajı gelirse yeniden başlat
+    window.addEventListener("message", function(e) {
+      if (e.data && e.data.type === "RESUME") {
+        scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 220, height: 220 }, aspectRatio: 1.333 },
+          function(decodedText, decodedResult) {
+            const fmt = decodedResult?.result?.format?.formatName ?? "unknown";
+            window.parent.postMessage({ type: "BARCODE_SCANNED", data: decodedText, format: fmt }, "*");
+            scanner.stop().catch(() => {});
+          },
+          function() {}
+        ).catch(() => {});
+      }
+    });
+  </script>
+</body>
+</html>
