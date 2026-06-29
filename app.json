@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "Barcode Scanner",
+    "slug": "barcode-scanner-app",
+    "scheme": "barcode-scanner-app",
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
+    "orientation": "portrait",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Kamera, barkod ve QR kodlarını okumak için kullanılır."
+      }
+    },
+    "android": {
+      "permissions": [
+        "CAMERA",
+        "CAMERA"
+      ],
+      "package": "com.anonymous.barcodescannerapp"
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}
