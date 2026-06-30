@@ -4,32 +4,95 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
   <title>Barcode Scanner</title>
+  <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
-    *{margin:0;padding:0;box-sizing:border-box}
+    *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
     body{background:#081018;font-family:-apple-system,system-ui,sans-serif;color:#F8FAFC;min-height:100vh}
     .hero{padding:16px 20px 12px}
-    h1{font-size:26px;font-weight:800;letter-spacing:.2px}
-    .sub{color:#A7B3C0;font-size:14px;margin-top:4px;line-height:1.4}
-    .cam-wrap{margin:0 16px;height:300px;border-radius:24px;overflow:hidden;
-      background:#0F172A;border:1px solid rgba(255,255,255,.12);position:relative}
-    video{width:100%;height:100%;object-fit:cover;display:block}
-    .frame{position:absolute;top:22%;left:12%;right:12%;bottom:22%;
-      border:2px solid #7DD3FC;border-radius:16px;
-      background:rgba(125,211,252,.05);pointer-events:none}
-    canvas{display:none}
-    .paused-overlay{position:absolute;inset:0;background:#0F172A;
-      display:flex;align-items:center;justify-content:center;font-size:15px;color:#E2E8F0;font-weight:600}
-    .actions{display:flex;gap:10px;padding:14px 16px 0}
+    h1{font-size:26px;font-weight:800}
+    .sub{color:#A7B3C0;font-size:14px;margin-top:4px;line-height:1.5}
+
+    /* html5-qrcode'un render ettiği container */
+    #qr-reader{
+      margin:0 16px;
+      border-radius:24px;
+      overflow:hidden;
+      background:#0F172A;
+      border:1px solid rgba(255,255,255,.12);
+      position:relative;
+    }
+
+    /* html5-qrcode kendi UI elemanlarını inject eder — bunları gizle/düzenle */
+    #qr-reader__header_message,
+    #qr-reader__status_span,
+    #qr-reader__dashboard_section_swaplink,
+    #qr-reader__filescan_input,
+    #qr-reader__dashboard_section_fileimage,
+    #qr-reader__dashboard,
+    select { display:none !important; }
+
+    #qr-reader video{
+      width:100% !important;
+      height:100% !important;
+      object-fit:cover !important;
+      border-radius:0 !important;
+    }
+
+    #qr-reader__scan_region{
+      background:transparent !important;
+      border:none !important;
+    }
+
+    #qr-reader__scan_region img{ display:none !important; }
+
+    /* Dokunma ipucu */
+    .tap-hint{
+      position:absolute;
+      bottom:12px;
+      left:50%;
+      transform:translateX(-50%);
+      background:rgba(0,0,0,.55);
+      color:#7DD3FC;
+      font-size:12px;
+      font-weight:600;
+      padding:6px 14px;
+      border-radius:20px;
+      pointer-events:none;
+      white-space:nowrap;
+      z-index:10;
+    }
+
+    /* Tarama çerçevesi */
+    .scan-frame{
+      position:absolute;
+      top:50%;left:50%;
+      transform:translate(-50%,-50%);
+      width:65%;aspect-ratio:1;
+      border:2px solid #7DD3FC;
+      border-radius:16px;
+      box-shadow:0 0 0 9999px rgba(0,0,0,.35);
+      pointer-events:none;
+      z-index:5;
+    }
+
+    .paused-overlay{
+      position:absolute;inset:0;
+      background:#0F172A;
+      display:none;align-items:center;justify-content:center;
+      font-size:15px;color:#E2E8F0;font-weight:600;z-index:20;
+    }
+
+    .actions{display:flex;gap:10px;padding:14px 16px 0;flex-wrap:wrap}
     .btn-primary{background:#38BDF8;color:#07111A;font-weight:800;
       padding:12px 18px;border-radius:14px;border:none;cursor:pointer;font-size:14px}
     .btn-secondary{background:#172033;color:#E2E8F0;font-weight:700;
-      padding:12px 18px;border-radius:14px;border:1px solid rgba(255,255,255,.08);
-      cursor:pointer;font-size:14px}
+      padding:12px 18px;border-radius:14px;
+      border:1px solid rgba(255,255,255,.08);cursor:pointer;font-size:14px}
     .btn-secondary:disabled{opacity:.4;cursor:default}
     .panel{padding:16px}
     .section-title{font-size:17px;font-weight:700;margin:12px 0 8px}
     .result-box{background:#111B2B;border-radius:14px;padding:14px;
-      color:#DBEAFE;font-size:15px;line-height:1.5;word-break:break-all}
+      color:#DBEAFE;font-size:15px;line-height:1.5;word-break:break-all;min-height:48px}
     .meta{color:#94A3B8;font-size:13px;margin-top:8px;line-height:1.6}
     .history-item{background:#111B2B;border-radius:14px;padding:14px;margin-top:10px}
     .history-type{color:#7DD3FC;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.8px}
@@ -40,16 +103,17 @@
   </style>
 </head>
 <body>
+
 <div class="hero">
   <h1>Barcode Scanner</h1>
   <p class="sub" id="sub-text">Kamera başlatılıyor...</p>
 </div>
 
-<div class="cam-wrap" id="cam-wrap">
-  <video id="video" playsinline muted autoplay></video>
-  <canvas id="canvas"></canvas>
-  <div class="frame" id="frame"></div>
-  <div class="paused-overlay" id="paused" style="display:none">Tarama duraklatıldı</div>
+<!-- html5-qrcode bu div'i kullanır -->
+<div id="qr-reader">
+  <div class="scan-frame" id="scan-frame"></div>
+  <div class="paused-overlay" id="paused">Tarama duraklatıldı</div>
+  <div class="tap-hint" id="tap-hint">📷 Odak için ekrana dokunun</div>
 </div>
 
 <div id="err-msg"></div>
@@ -64,166 +128,146 @@
   <div class="section-title">Son Sonuç</div>
   <div class="result-box" id="result-text">Henüz okutma yok.</div>
   <div class="meta" id="result-meta"></div>
-
   <div class="section-title">Geçmiş</div>
   <div id="history-list"><div style="color:#94A3B8;font-size:14px">Kayıt bulunmuyor.</div></div>
 </div>
 
-<!-- ZXing UMD — CDN'den, bundler yok -->
-<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.19.1/umd/index.min.js"></script>
 <script>
-  var video = document.getElementById('video');
-  var canvas = document.getElementById('canvas');
-  var ctx = canvas.getContext('2d');
-  var subText = document.getElementById('sub-text');
-  var pausedEl = document.getElementById('paused');
-  var frameEl = document.getElementById('frame');
-  var errMsg = document.getElementById('err-msg');
+var scanner = null;
+var latestResult = null;
+var history = [];
+var isScanning = false;
 
-  var latestResult = null;
-  var history = [];
-  var scanning = true;
-  var tickTimer = null;
-  var stream = null;
-  var reader = null;
+// Kamera yüksek çözünürlük + arka kamera + sürekli odak
+var videoConstraints = {
+  facingMode: { exact: 'environment' },
+  width:  { min: 640, ideal: 1920, max: 1920 },
+  height: { min: 480, ideal: 1080, max: 1080 },
+};
 
-  function showError(msg) {
-    errMsg.textContent = '⚠️ ' + msg;
-    errMsg.style.display = 'block';
-    subText.textContent = 'Kamera açılamadı.';
-  }
+function showError(msg) {
+  document.getElementById('err-msg').textContent = '⚠️ ' + msg;
+  document.getElementById('err-msg').style.display = 'block';
+  document.getElementById('sub-text').textContent = 'Hata oluştu.';
+}
 
-  function initReader() {
-    var hints = new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-      ZXing.BarcodeFormat.QR_CODE,
-      ZXing.BarcodeFormat.EAN_13,
-      ZXing.BarcodeFormat.EAN_8,
-      ZXing.BarcodeFormat.UPC_A,
-      ZXing.BarcodeFormat.UPC_E,
-      ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.CODE_93,
-      ZXing.BarcodeFormat.CODE_128,
-      ZXing.BarcodeFormat.ITF,
-      ZXing.BarcodeFormat.CODABAR,
-      ZXing.BarcodeFormat.PDF_417,
-      ZXing.BarcodeFormat.AZTEC,
-      ZXing.BarcodeFormat.DATA_MATRIX,
-    ]);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    reader = new ZXing.MultiFormatReader();
-    reader.setHints(hints);
-  }
+function onScanSuccess(decodedText, decodedResult) {
+  if (!isScanning) return;
+  isScanning = false;
+  scanner.stop().catch(function(){});
 
-  function tick() {
-    if (!scanning) return;
-    if (video.readyState === video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      try {
-        var lum = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-        var bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-        var result = reader.decode(bmp);
-        if (result) {
-          onFound(result.getText(), result.getBarcodeFormat().toString());
-          return;
-        }
-      } catch(e) {
-        // NotFoundException — normal, devam et
-      }
-    }
-    tickTimer = setTimeout(tick, 150);
-  }
+  var fmt = (decodedResult && decodedResult.result && decodedResult.result.format)
+    ? decodedResult.result.format.formatName
+    : 'unknown';
 
-  function onFound(data, fmt) {
-    scanning = false;
-    clearTimeout(tickTimer);
-    subText.textContent = 'Tarama duraklatıldı.';
-    pausedEl.style.display = 'flex';
-    frameEl.style.display = 'none';
+  latestResult = { data: decodedText, type: fmt, time: new Date().toLocaleString('tr-TR') };
+  history.unshift(latestResult);
+  if (history.length > 10) history.pop();
 
-    latestResult = { data: data, type: fmt, time: new Date().toLocaleString('tr-TR') };
-    history.unshift(latestResult);
-    if (history.length > 10) history.pop();
+  document.getElementById('sub-text').textContent = 'Barkod okundu!';
+  document.getElementById('result-text').textContent = decodedText;
+  document.getElementById('result-meta').innerHTML = 'Tür: ' + fmt + '<br>Zaman: ' + latestResult.time;
+  document.getElementById('btn-copy').disabled = false;
+  document.getElementById('btn-open').disabled = false;
+  document.getElementById('paused').style.display = 'flex';
+  document.getElementById('scan-frame').style.display = 'none';
+  document.getElementById('tap-hint').style.display = 'none';
 
-    document.getElementById('result-text').textContent = data;
-    document.getElementById('result-meta').innerHTML = 'Tür: ' + fmt + '<br>Zaman: ' + latestResult.time;
-    document.getElementById('btn-copy').disabled = false;
-    document.getElementById('btn-open').disabled = false;
+  renderHistory();
+}
 
-    renderHistory();
-  }
+function startScanner() {
+  isScanning = true;
+  document.getElementById('paused').style.display = 'none';
+  document.getElementById('scan-frame').style.display = 'block';
+  document.getElementById('tap-hint').style.display = 'block';
+  document.getElementById('sub-text').textContent = 'Kamerayı barkoda doğrultun.';
 
-  function renderHistory() {
-    var el = document.getElementById('history-list');
-    if (history.length === 0) {
-      el.innerHTML = '<div style="color:#94A3B8;font-size:14px">Kayıt bulunmuyor.</div>';
-      return;
-    }
-    el.innerHTML = history.map(function(h) {
-      return '<div class="history-item">' +
-        '<div class="history-type">' + h.type + '</div>' +
-        '<div class="history-val">' + h.data + '</div>' +
-        '<div class="history-time">' + h.time + '</div>' +
-        '</div>';
-    }).join('');
-  }
+  scanner = new Html5Qrcode('qr-reader');
 
-  function resumeScan() {
-    scanning = true;
-    pausedEl.style.display = 'none';
-    frameEl.style.display = 'block';
-    subText.textContent = 'Kamerayı barkoda doğrultun.';
-    tick();
-  }
-
-  function copyResult() {
-    if (!latestResult) return;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(latestResult.data).then(function() {
-        alert('Kopyalandı!');
-      });
-    } else {
-      var ta = document.createElement('textarea');
-      ta.value = latestResult.data;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      alert('Kopyalandı!');
-    }
-  }
-
-  function openResult() {
-    if (!latestResult) return;
-    var url = latestResult.data.startsWith('http')
-      ? latestResult.data
-      : 'https://www.google.com/search?q=' + encodeURIComponent(latestResult.data);
-    window.open(url, '_blank');
-  }
-
-  // Başlat
-  initReader();
-
-  var constraints = { video: { facingMode: { exact: 'environment' } } };
-  navigator.mediaDevices.getUserMedia(constraints)
-    .catch(function() {
-      // exact desteklenmiyorsa ideal dene
-      return navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-    })
-    .then(function(s) {
-      stream = s;
-      video.srcObject = s;
-      video.onloadedmetadata = function() {
-        video.play();
-        subText.textContent = 'Kamerayı barkoda doğrultun.';
-        tick();
-      };
-    })
-    .catch(function(err) {
-      showError(err.message || 'Kamera izni reddedildi.');
+  // Önce exact:environment dene, olmazsa ideal dene
+  scanner.start(
+    { videoConstraints: videoConstraints },
+    { fps: 15, qrbox: { width: 240, height: 200 }, aspectRatio: 1.2 },
+    onScanSuccess,
+    function() {} // not found — sessiz
+  ).catch(function(err) {
+    // exact desteklenmiyorsa daha basit constraints ile tekrar dene
+    videoConstraints = {
+      facingMode: 'environment',
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+    };
+    scanner.start(
+      { videoConstraints: videoConstraints },
+      { fps: 15, qrbox: { width: 240, height: 200 }, aspectRatio: 1.2 },
+      onScanSuccess,
+      function() {}
+    ).catch(function(err2) {
+      showError(err2 || err);
     });
+  });
+}
+
+function resumeScan() {
+  if (isScanning) return;
+  if (scanner) {
+    scanner.stop().catch(function(){}).finally(function() {
+      startScanner();
+    });
+  } else {
+    startScanner();
+  }
+}
+
+function copyResult() {
+  if (!latestResult) return;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(latestResult.data).then(function(){alert('Kopyalandı!');});
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = latestResult.data;
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    alert('Kopyalandı!');
+  }
+}
+
+function openResult() {
+  if (!latestResult) return;
+  var url = latestResult.data.startsWith('http')
+    ? latestResult.data
+    : 'https://www.google.com/search?q=' + encodeURIComponent(latestResult.data);
+  window.open(url, '_blank');
+}
+
+function renderHistory() {
+  var el = document.getElementById('history-list');
+  if (!history.length) {
+    el.innerHTML = '<div style="color:#94A3B8;font-size:14px">Kayıt bulunmuyor.</div>';
+    return;
+  }
+  el.innerHTML = history.map(function(h) {
+    return '<div class="history-item">' +
+      '<div class="history-type">' + h.type + '</div>' +
+      '<div class="history-val">' + h.data + '</div>' +
+      '<div class="history-time">' + h.time + '</div></div>';
+  }).join('');
+}
+
+// Kamera alanına dokunma → iOS'ta otomatik odak tetiklenir
+document.getElementById('qr-reader').addEventListener('click', function() {
+  // Video elementini bul ve odak kandırma tekniği uygula
+  var vid = document.querySelector('#qr-reader video');
+  if (!vid) return;
+  // iOS Safari'de brief pause/play odağı yeniler
+  vid.pause();
+  setTimeout(function(){ vid.play(); }, 80);
+});
+
+// Başlat
+startScanner();
 </script>
 </body>
 </html>
